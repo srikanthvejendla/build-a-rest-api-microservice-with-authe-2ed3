@@ -1,0 +1,54 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres:13-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: dbname
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+
+  app:
+    build: .
+    depends_on:
+      - postgres
+      - redis
+    environment:
+      DATABASE_URL: postgresql://user:password@postgres:5432/dbname?schema=public
+      REDIS_URL: redis://redis:6379
+      JWT_PRIVATE_KEY_PATH: ./keys/jwtRS256.key
+      JWT_PUBLIC_KEY_PATH: ./keys/jwtRS256.key.pub
+      JWT_ACCESS_EXPIRES_IN: 15m
+      JWT_REFRESH_EXPIRES_IN: 7d
+      RATE_LIMIT_GLOBAL: 100
+      RATE_LIMIT_GLOBAL_WINDOW: 900
+      RATE_LIMIT_USER: 1000
+      RATE_LIMIT_USER_WINDOW: 3600
+      PORT: 4000
+      NODE_ENV: production
+    ports:
+      - "4000:4000"
+    volumes:
+      - ./keys:/app/keys:ro
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:4000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    command: ["sh", "-c", "npx prisma migrate deploy && node dist/index.js"]
+
+volumes:
+  pgdata:
+  redisdata:
